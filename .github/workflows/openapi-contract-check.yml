@@ -1,0 +1,71 @@
+name: OpenAPI Contract Check
+
+on:
+  pull_request:
+    paths:
+      - 'openapi.yaml'
+
+jobs:
+  openapi-diff:
+    name: Enforce generated frontend OpenAPI types are updated
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch main
+        run: git fetch origin main --depth=1
+
+      - name: Create OpenAPI diff report (main vs PR)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git show origin/main:openapi.yaml > /tmp/openapi-main.yaml
+
+          # Create a diff report for reviewers
+          diff -u /tmp/openapi-main.yaml openapi.yaml > openapi.diff || true
+
+          if [ -s openapi.diff ]; then
+            echo "openapi.yaml changed vs origin/main"
+          else
+            echo "openapi.yaml unchanged vs origin/main"
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        shell: bash
+        run: npm ci
+        working-directory: frontend
+
+      - name: Generate frontend OpenAPI types
+        shell: bash
+        run: npm run generate:openapi
+        working-directory: frontend
+
+      - name: Fail if generated OpenAPI types are not committed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- frontend/src/generated/openapi.ts; then
+            echo "frontend/src/generated/openapi.ts is out of date. Run 'npm --prefix frontend run generate:openapi' and commit changes."
+            git diff -- frontend/src/generated/openapi.ts || true
+            exit 1
+          fi
+
+      - name: Upload diff (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-diff
+          path: openapi.diff
+          if-no-files-found: ignore
