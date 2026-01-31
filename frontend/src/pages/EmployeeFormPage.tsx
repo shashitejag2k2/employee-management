@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   MenuItem,
   Paper,
   Stack,
@@ -22,6 +23,8 @@ import {
   getEmployeeById,
   updateEmployee,
 } from '../services/employeeApi';
+import { listDepartments } from '../services/departmentApi';
+import type { Department } from '../types/department';
 
 type FieldErrors = Partial<Record<keyof EmployeeUpdateRequest, string>>;
 
@@ -76,6 +79,10 @@ export default function EmployeeFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+  const [departmentsError, setDepartmentsError] = useState<string | null>(null);
+
   const [form, setForm] = useState<EmployeeUpdateRequest>({
     firstName: '',
     lastName: '',
@@ -89,6 +96,29 @@ export default function EmployeeFormPage() {
   });
 
   const title = useMemo(() => (isEdit ? 'Edit Employee' : 'Create Employee'), [isEdit]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      setDepartmentsLoading(true);
+      setDepartmentsError(null);
+      try {
+        const res = await listDepartments({ page: 0, size: 100, sort: 'name,asc' });
+        setDepartments(res.items);
+
+        if (res.items.length && !form.departmentId) {
+          setForm((p) => ({ ...p, departmentId: res.items[0].id }));
+        }
+      } catch (err: any) {
+        setDepartmentsError(
+          err?.response?.data?.message || err?.message || 'Failed to load departments',
+        );
+      } finally {
+        setDepartmentsLoading(false);
+      }
+    };
+
+    void loadDepartments();
+  }, []);
 
   useEffect(() => {
     if (!isEdit || !id) return;
@@ -164,6 +194,8 @@ export default function EmployeeFormPage() {
 
         {error && <Alert severity="error">{error}</Alert>}
 
+        {departmentsError && <Alert severity="warning">{departmentsError}</Alert>}
+
         <Paper sx={{ p: 2 }}>
           <Stack spacing={2}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -226,13 +258,29 @@ export default function EmployeeFormPage() {
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
-                label="Department ID"
+                select
+                label="Department"
                 value={form.departmentId}
                 onChange={(e) => setForm((p) => ({ ...p, departmentId: e.target.value }))}
                 error={Boolean(fieldErrors.departmentId)}
                 helperText={fieldErrors.departmentId}
                 fullWidth
-              />
+                disabled={departmentsLoading}
+              >
+                <MenuItem value="">
+                  <em>Select department</em>
+                </MenuItem>
+                {departments.map((d) => (
+                  <MenuItem key={d.id} value={d.id}>
+                    {d.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+              {departmentsLoading && (
+                <Stack direction="row" alignItems="center" sx={{ px: 1 }}>
+                  <CircularProgress size={20} />
+                </Stack>
+              )}
               <TextField
                 select
                 label="Role"

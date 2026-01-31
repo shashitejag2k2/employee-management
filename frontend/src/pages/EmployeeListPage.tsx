@@ -123,6 +123,7 @@ export default function EmployeeListPage() {
         page: paginationModel.page,
         size: paginationModel.pageSize,
         sort: toSortParam(sortModel),
+        status: 'ACTIVE',
         search,
       });
 
