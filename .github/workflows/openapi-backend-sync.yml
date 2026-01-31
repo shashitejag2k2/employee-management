@@ -1,0 +1,66 @@
+name: OpenAPI Backend Sync
+
+on:
+  pull_request:
+
+jobs:
+  backend-openapi-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Setup Node (for oasdiff)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install YAML parser
+        run: npm install
+        working-directory: .github/scripts
+
+      - name: Start backend (ci profile)
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup mvn -f backend/pom.xml -DskipTests spring-boot:run -Dspring-boot.run.profiles=ci > backend.log 2>&1 &
+
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8080/v3/api-docs.yaml >/dev/null 2>&1; then
+              echo "Backend is up (via openapi endpoint)"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Backend did not start in time"
+          tail -n 200 backend.log || true
+          exit 1
+
+      - name: Download generated OpenAPI from backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS http://localhost:8080/v3/api-docs.yaml -o backend-openapi.yaml
+
+      - name: Ensure repo openapi.yaml covers backend endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .github/scripts/openapi-subset-check.mjs openapi.yaml backend-openapi.yaml
+
+      - name: Upload backend log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: backend.log
+          if-no-files-found: ignore
