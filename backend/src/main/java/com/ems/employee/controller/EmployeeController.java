@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/employees")
+@RequestMapping("/api/v1/staff")
 public class EmployeeController {
 
     private final EmployeeService employeeService;
